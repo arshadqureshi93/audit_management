@@ -1,0 +1,363 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:AUD-{employee_details}-{DD}{MM}{YYYY}-{###}",
+ "creation": "2024-06-18 10:07:07.734299",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "admin_tab_tab",
+  "status",
+  "current_person_id",
+  "reporting_person_id",
+  "higher_reporting_person_id",
+  "new_request_tab",
+  "enter_employee_details_section",
+  "branch",
+  "column_break_pnoww",
+  "employee_details",
+  "section_break_59krn",
+  "employee_first_name",
+  "column_break_7ksaw",
+  "employee_last_name",
+  "column_break_wewgn",
+  "employee_name",
+  "column_break_pmbbq",
+  "employee_designation",
+  "column_break_uybpe",
+  "employee_department",
+  "column_break_4bgxp",
+  "employee_region",
+  "column_break_wulue",
+  "employee_district",
+  "column_break_8i2g1",
+  "employee_branch",
+  "column_break_xm8jz",
+  "employee_division",
+  "query_section",
+  "query_box",
+  "audit_query_generated_by",
+  "query_generated_by_name",
+  "column_break_szi9c",
+  "query_generated_by_designation",
+  "column_break_gumww",
+  "query_generated_by_branch",
+  "response_section",
+  "response_box",
+  "reporting_person_response_section",
+  "reporting_person_response_box",
+  "higher_reporting_person_response_section",
+  "higher_reporting_person_response_box"
+ ],
+ "fields": [
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Enter Branch ",
+   "options": "Branch"
+  },
+  {
+   "fieldname": "column_break_pnoww",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.__islocal || frappe.user.has_role(\"Audit Manager\") || (frappe.session.user==doc.reporting_person_id && doc.status==\"Pending From Reporting\") || (frappe.session.user==doc.higher_reporting_person_id && doc.status==\"Pending From Higher Reporting\")\n",
+   "fieldname": "section_break_59krn",
+   "fieldtype": "Section Break",
+   "read_only_depends_on": "eval:!(frappe.user.has_role(\"Audit Manager\"));"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.first_name",
+   "fieldname": "employee_first_name",
+   "fieldtype": "Data",
+   "label": "First Name"
+  },
+  {
+   "fieldname": "column_break_7ksaw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.last_name",
+   "fieldname": "employee_last_name",
+   "fieldtype": "Data",
+   "label": "Last Name"
+  },
+  {
+   "fieldname": "column_break_wewgn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Full Name"
+  },
+  {
+   "depends_on": "eval:doc.__islocal || frappe.user.has_role(\"Audit Manager\") || (frappe.session.user==doc.reporting_person_id && doc.status==\"Pending From Reporting\") || (frappe.session.user==doc.higher_reporting_person_id && doc.status==\"Pending From Higher Reporting\")\n",
+   "fieldname": "column_break_pmbbq",
+   "fieldtype": "Section Break",
+   "read_only_depends_on": "eval:!(frappe.user.has_role(\"Audit Manager\"));"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.designation",
+   "fieldname": "employee_designation",
+   "fieldtype": "Data",
+   "label": "Designation"
+  },
+  {
+   "fieldname": "column_break_uybpe",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.department",
+   "fieldname": "employee_department",
+   "fieldtype": "Data",
+   "label": "Department"
+  },
+  {
+   "fieldname": "column_break_4bgxp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.region",
+   "fieldname": "employee_region",
+   "fieldtype": "Data",
+   "label": "Region"
+  },
+  {
+   "depends_on": "eval:doc.__islocal || frappe.user.has_role(\"Audit Manager\") || (frappe.session.user==doc.reporting_person_id && doc.status==\"Pending From Reporting\") || (frappe.session.user==doc.higher_reporting_person_id && doc.status==\"Pending From Higher Reporting\")\n",
+   "fieldname": "column_break_wulue",
+   "fieldtype": "Section Break",
+   "read_only_depends_on": "eval:!(frappe.user.has_role(\"Audit Manager\"));"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.district",
+   "fieldname": "employee_district",
+   "fieldtype": "Data",
+   "label": "District"
+  },
+  {
+   "fieldname": "column_break_8i2g1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.branch",
+   "fieldname": "employee_branch",
+   "fieldtype": "Data",
+   "label": "Branch"
+  },
+  {
+   "fieldname": "column_break_xm8jz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fetch_from": "employee_details.division",
+   "fieldname": "employee_division",
+   "fieldtype": "Data",
+   "label": "Division"
+  },
+  {
+   "fieldname": "query_box",
+   "fieldtype": "Text"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "\nDraft\nPending From Employee\nPending From Auditor\nPending From Reporting\nPending From Higher Reporting\nSatisfied\nNot Satisfied"
+  },
+  {
+   "depends_on": "eval:frappe.user.has_role(\"System Manager\")",
+   "fieldname": "admin_tab_tab",
+   "fieldtype": "Tab Break",
+   "label": "Admin Tab"
+  },
+  {
+   "fieldname": "new_request_tab",
+   "fieldtype": "Tab Break",
+   "label": "New Request "
+  },
+  {
+   "depends_on": "eval:doc.branch",
+   "fieldname": "employee_details",
+   "fieldtype": "Link",
+   "label": "Employee ID",
+   "options": "Employee"
+  },
+  {
+   "depends_on": "eval:doc.employee_details",
+   "fieldname": "query_section",
+   "fieldtype": "Section Break",
+   "label": "Audit Query :"
+  },
+  {
+   "depends_on": "eval:doc.__islocal || frappe.user.has_role(\"Audit Manager\") || (frappe.session.user==doc.reporting_person_id && doc.status==\"Pending From Reporting\") || (frappe.session.user==doc.higher_reporting_person_id && doc.status==\"Pending From Higher Reporting\")\n",
+   "fieldname": "enter_employee_details_section",
+   "fieldtype": "Section Break",
+   "label": "<span style=\"color: red;\">*</span> Enter Employee Details",
+   "read_only_depends_on": "eval:!(frappe.user.has_role(\"Audit Manager\"));"
+  },
+  {
+   "depends_on": "eval:frappe.user.has_role(\"Employee\")",
+   "fieldname": "response_box",
+   "fieldtype": "Text",
+   "read_only_depends_on": "eval:doc.response_box!=null && doc.status!=\"Pending From Employee\";"
+  },
+  {
+   "depends_on": "eval:!frappe.user.has_role(\"Audit Manager\") || (frappe.user.has_role(\"Audit Manager\") && doc.status === \"Pending From Auditor\" || doc.status === \"Satisfied\" || doc.status === \"Pending From Reporting\" || doc.status === \"Pending From Higher Reporting\")",
+   "fieldname": "response_section",
+   "fieldtype": "Section Break",
+   "label": "Employee Response :"
+  },
+  {
+   "depends_on": "eval: (frappe.session.user == doc.reporting_person_id && doc.status == \"Pending From Reporting\") || doc.reporting_person_response_box != null;",
+   "fieldname": "reporting_person_response_section",
+   "fieldtype": "Section Break",
+   "label": "Employee's Reporting Response : "
+  },
+  {
+   "fieldname": "reporting_person_response_box",
+   "fieldtype": "Text",
+   "read_only_depends_on": "eval:doc.reporting_person_response_box!=null && doc.status!=\"Pending From Reporting\";"
+  },
+  {
+   "fieldname": "reporting_person_id",
+   "fieldtype": "Data",
+   "label": "Reporting Person ID"
+  },
+  {
+   "fieldname": "current_person_id",
+   "fieldtype": "Data",
+   "label": "Current Person ID"
+  },
+  {
+   "fieldname": "higher_reporting_person_id",
+   "fieldtype": "Data",
+   "label": "Higher Reporting Person ID"
+  },
+  {
+   "depends_on": "eval: frappe.session.user == doc.higher_reporting_person_id && doc.status == \"Pending From Higher Reporting\" || doc.higher_reporting_person_response_box!=null",
+   "fieldname": "higher_reporting_person_response_section",
+   "fieldtype": "Section Break",
+   "label": "Employee's Higher Reporting Response :"
+  },
+  {
+   "fieldname": "higher_reporting_person_response_box",
+   "fieldtype": "Text",
+   "read_only_depends_on": "eval:doc.higher_reporting_person_response_box!=null && doc.status!=\"Pending From Higher Reporting\";"
+  },
+  {
+   "depends_on": "eval:!frappe.user.has_role(\"Audit Manager\");",
+   "fieldname": "audit_query_generated_by",
+   "fieldtype": "Section Break",
+   "label": "Audit Query generated by :"
+  },
+  {
+   "fieldname": "query_generated_by_name",
+   "fieldtype": "Data",
+   "label": "Name :",
+   "read_only_depends_on": "eval:doc.query_generated_by_name;"
+  },
+  {
+   "fieldname": "column_break_szi9c",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "query_generated_by_designation",
+   "fieldtype": "Data",
+   "label": "Designation :",
+   "read_only_depends_on": "eval:doc.query_generated_by_designation;"
+  },
+  {
+   "fieldname": "column_break_gumww",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "query_generated_by_branch",
+   "fieldtype": "Data",
+   "label": "Branch :",
+   "read_only_depends_on": "eval:doc.query_generated_by_branch;"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2024-06-29 10:00:43.890210",
+ "modified_by": "Administrator",
+ "module": "Audit Management",
+ "name": "My Audits",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Audit Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Draft"
+  },
+  {
+   "color": "Light Blue",
+   "title": "Pending From Employee"
+  },
+  {
+   "color": "Yellow",
+   "title": "Pending From Auditor"
+  },
+  {
+   "color": "Green",
+   "title": "Satisfied"
+  },
+  {
+   "color": "Red",
+   "title": "Not Satisfied"
+  },
+  {
+   "color": "Orange",
+   "title": "Pending From Reporting"
+  },
+  {
+   "color": "Purple",
+   "title": "Pending From Higher Reporting"
+  }
+ ]
+}
