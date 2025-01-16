@@ -1,7 +1,7 @@
 ## Audit Management
 
-this app is used for Audit management
+this app is used for Audit Management
 
 #### License
 
-MIT
+xyz

@@ -8,7 +8,8 @@ frappe.ui.form.on("My Audits", {
   },
   check_field_read_only: function (frm) {
     if (
-      !frappe.user.has_role("Audit Manager") &&
+      (!frappe.user.has_role("Audit Manager") ||
+        !frappe.user.has_role("Audit Member")) &&
       frm.doc.status === "Pending"
     ) {
       console.log("Disabling Save button");
@@ -16,12 +17,21 @@ frappe.ui.form.on("My Audits", {
       frm.set_df_property("audit_query_box", "read_only", true);
       frm.set_df_property("emp_branch", "read_only", true);
       frm.set_df_property("employee_id", "read_only", true);
+      frm.set_df_property("query_type", "read_only", true);
       frm.set_df_property("audit_query_subject_box", "read_only", true);
     }
-    if (frappe.user.has_role("Audit Manager") && frm.doc.status === "Pending") {
+    if (
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
+      frm.doc.status === "Pending"
+    ) {
       frm.disable_form();
     }
-    if (frappe.user.has_role("Audit Manager") && frm.doc.status === "Draft") {
+    if (
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
+      frm.doc.status === "Draft"
+    ) {
       frm.disable_form();
     }
     if (
@@ -97,6 +107,16 @@ frappe.ui.form.on("My Audits", {
       frm.refresh_field("gm_attach_box");
     }
 
+    // making read_only to HR response box
+    if (frm.doc.query_status !== "Pending From HR") {
+      if (frm.doc.hr_user_status === "Responded") {
+        frm.set_df_property("hr_response_box", "read_only", 1);
+        frm.set_df_property("hr_attach_box", "read_only", true);
+      }
+      frm.refresh_field("hr_response_box");
+      frm.refresh_field("hr_attach_box");
+    }
+
     // making read_only to CEO response box
     if (frm.doc.query_status !== "Pending From CEO") {
       if (frm.doc.ceo_user_status === "Responded") {
@@ -106,10 +126,6 @@ frappe.ui.form.on("My Audits", {
       frm.refresh_field("ceo_response_box");
       frm.refresh_field("ceo_attach_box");
     }
-  },
-  employee_id: function (frm) {
-    frm.trigger("fetch_employee_id");
-    //fetching employee data (audit employee)
   },
   audit_query_subject_box: function (frm) {
     // Check if audit_query_box has a value before converting to uppercase
@@ -184,6 +200,13 @@ frappe.ui.form.on("My Audits", {
       frm.refresh_field("gm_response_box");
     }
   },
+  hr_response_box: function (frm) {
+    // Check if com_response_box has a value before converting to uppercase
+    if (frm.doc.gm_response_box) {
+      frm.set_value("hr_response_box", frm.doc.hr_response_box.toUpperCase());
+      frm.refresh_field("hr_response_box");
+    }
+  },
   coo_response_box: function (frm) {
     // Check if com_response_box has a value before converting to uppercase
     if (frm.doc.coo_response_box) {
@@ -229,21 +252,12 @@ frappe.ui.form.on("My Audits", {
       frappe.validated = false;
       return;
     }
-  },
-  emp_branch: function (frm) {
-    // Get the selected branch value
-    var selected_branch = frm.doc.emp_branch;
-    console.log("selected branch : " + selected_branch);
-    // Apply filter to employee_details field based on the selected branch
-    frm.set_query("employee_id", function () {
-      return {
-        filters: {
-          branch: selected_branch,
-        },
-      };
-    });
-    // Clear the employee_details field if branch is changed
-    frm.set_value("employee_id", null);
+
+    if (!frm.doc.query_type) {
+      frappe.msgprint("<b>Before saving, Please select Query Type.</b>");
+      frappe.validated = false;
+      return;
+    }
   },
   // Function to call the Python method and set intro HTML
   call_html_intro: function (frm) {
@@ -304,23 +318,28 @@ frappe.ui.form.on("My Audits", {
     if (frm.doc.status === "Close") {
       frm.disable_form();
     }
-    if (frappe.user.has_role("Audit Manager") && frm.doc.status === "Pending") {
+    if (
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
+      frm.doc.status === "Pending"
+    ) {
       frm.disable_form();
     }
-    if (frm.is_new()) {
-      console.log("new");
-      frm.trigger("fetch_query_maker");
-      frm.trigger("fetch_employee_id");
+
+    // Check if the form is new
+    if (frm.is_new() && !frm.__is_fetched) {
+      console.log("calling and fetching details")
+      frm.trigger("fetch_query_maker"); // Call the fetch function
     } else if (!frm.is_new()) {
       console.log("not new");
-      frm.trigger("fetch_query_maker");
-      frm.trigger("fetch_employee_id");
       if (
         frm.doc.status === "Pending" &&
         ((frappe.session.user == frm.doc.bm_user_id &&
           frm.doc.bm_user_status === "Pending") ||
           (frappe.session.user == frm.doc.gm_user_id &&
             frm.doc.gm_user_status === "Pending") ||
+          (frappe.session.user == frm.doc.hr_user_id &&
+            frm.doc.hr_user_status === "Pending") ||
           (frappe.session.user == frm.doc.coo_user_id &&
             frm.doc.coo_user_status === "Pending") ||
           (frappe.session.user == frm.doc.ceo_user_id &&
@@ -371,566 +390,138 @@ frappe.ui.form.on("My Audits", {
       ) {
         frm.trigger("show_sendResponse_btn");
       }
-      // if (
-      //   frappe.user.has_role("Audit Manager") &&
-      //   frm.doc.status === "Pending" &&
-      //   (frm.doc.bm_user_status === "" ||
-      //     frm.doc.dh_user_status === "" ||
-      //     frm.doc.com_user_status === "" ||
-      //     frm.doc.rm_user_status === "" ||
-      //     frm.doc.rom_user_status === "" ||
-      //     frm.doc.zm_user_status === "" ||
-      //     frm.doc.zom_user_status === "" ||
-      //     frm.doc.gm_user_status === "" ||
-      //     frm.doc.coo_user_status === "" ||
-      //     frm.doc.ceo_user_status === "")
-      // ) {
-      // }
 
       if (
-        frappe.user.has_role("Audit Manager") &&
+        (frappe.user.has_role("Audit Manager") ||
+          frappe.user.has_role("Audit Member")) &&
         (frm.doc.status === "Draft" || frm.doc.status === "Pending")
       ) {
         if (frm.doc.bm_user_status === "") {
           frm.trigger("show_sendToBmWithClose_btn");
         }
-        if (frm.doc.dh_user_status === "" || frm.doc.com_user_status === "") {
+        if (
+          (frm.doc.dh_user_status === "" || frm.doc.com_user_status === "") &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToDhComWithClose_btn");
         }
-        if (frm.doc.rm_user_status === "" || frm.doc.rom_user_status === "") {
+        if (
+          (frm.doc.rm_user_status === "" || frm.doc.rom_user_status === "") &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToRmRomWithClose_btn");
         }
-        if (frm.doc.zm_user_status === "" || frm.doc.zom_user_status === "") {
+        if (
+          (frm.doc.zm_user_status === "" || frm.doc.zom_user_status === "") &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToZmZomWithClose_btn");
         }
-        if (frm.doc.gm_user_status === "") {
+        if (
+          frm.doc.gm_user_status === "" &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToGm_withClose_btn");
         }
-        if (frm.doc.coo_user_status === "") {
+        if (
+          frm.doc.hr_user_status === "" &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
+          frm.trigger("show_sendToHr_withClose_btn");
+        }
+        if (
+          frm.doc.coo_user_status === "" &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToCOO_withClose_btn");
         }
-        if (frm.doc.ceo_user_status === "") {
+        if (
+          frm.doc.ceo_user_status === "" &&
+          (frm.doc.query_type !== "Branch Compliance" ||
+            frm.doc.bm_user_status === "Responded")
+        ) {
           frm.trigger("show_sendToCEO_withClose_btn");
         }
         if (
-          !frm.doc.bm_user_status ||
-          !frm.doc.dh_user_status ||
-          !frm.doc.com_user_status ||
-          !frm.doc.rm_user_status ||
-          !frm.doc.rom_user_status ||
-          !frm.doc.zm_user_status ||
-          !frm.doc.zom_user_status ||
-          !frm.doc.gm_user_status ||
-          !frm.doc.coo_user_status ||
-          !frm.doc.ceo_user_status
+          (!frm.doc.bm_user_status ||
+            !frm.doc.dh_user_status ||
+            !frm.doc.com_user_status ||
+            !frm.doc.rm_user_status ||
+            !frm.doc.rom_user_status ||
+            !frm.doc.zm_user_status ||
+            !frm.doc.zom_user_status ||
+            !frm.doc.gm_user_status ||
+            !frm.doc.coo_user_status ||
+            !frm.doc.ceo_user_status) &&
+          frm.doc.query_type !== "Branch Compliance"
         ) {
           frm.trigger("show_sendToAll_withClose_btn");
         }
       }
-      if (frm.doc.status !== "Draft" && frappe.user.has_role("Audit Manager")) {
+      if (frm.doc.status !== "Draft" && frappe.user.has_role("Audit Manager") || frappe.user.has_role("Audit Member")) {
         frm.trigger("close_query");
       }
-
-      // if (
-      //   frappe.user.has_role("Audit Manager") &&
-      //   frm.doc.status === "Pending" &&
-      //   frm.doc.query_status === "Response From BM" &&
-      //   frm.doc.bm_user_status === "Responded"
-      // ) {
-      //   frm.trigger("show_sendToDhComWithClose_btn");
-      // }
-
-      // if (
-      //   frappe.user.has_role("Audit Manager") &&
-      //   frm.doc.status === "Pending" &&
-      //   frm.doc.query_status === "Response From DH & COM" &&
-      //   frm.doc.dh_user_status === "Responded" &&
-      //   frm.doc.com_user_status === "Responded"
-      // ) {
-      //   frm.trigger("show_sendToRmRomWithClose_btn");
-      // }
-      // if (
-      //   frappe.user.has_role("Audit Manager") &&
-      //   frm.doc.status === "Pending" &&
-      //   frm.doc.query_status === "Response From RM & ROM" &&
-      //   frm.doc.rm_user_status === "Responded" &&
-      //   frm.doc.rom_user_status === "Responded"
-      // ) {
-      //   frm.trigger("show_sendToZmZomWithClose_btn");
-      // }
-      // if (
-      //   frappe.user.has_role("Audit Manager") &&
-      //   frm.doc.status === "Pending" &&
-      //   frm.doc.query_status === "Response From ZM & ZOM" &&
-      //   frm.doc.zm_user_status === "Responded" &&
-      //   frm.doc.zom_user_status === "Responded"
-      // ) {
-      //   frm.trigger("show_sendtoCOOorGm_withClose_btn");
-      // }
     }
-    // // Define the status messages
-    // let statusMessages = {
-    //   pending: "Pending",
-    //   responded: "Responded",
-    // };
-
-    // // Define colors
-    // let colors = {
-    //   green: "#28a745",
-    //   red: "#dc3545",
-    // };
-
-    // // Initialize the intro message
-    // let introMessage = "";
-
-    // // Check the current status and set the intro message
-    // if (frm.doc.status === "Pending") {
-    //   if (
-    //     frm.doc.query_status === "Pending From BM" &&
-    //     frm.doc.bm_user_status === "Pending"
-    //   ) {
-    //     introMessage = `
-    // 			<p><span style="color: ${colors.green}">Audit Manager</span> &#8658;
-    // 			<span style="color: ${colors.red}">BM</span></p>
-    // 		`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From BM" &&
-    //     frm.doc.bm_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    // 			<p><span style="color: ${colors.green}">Audit Manager</span> &#8658;
-    // 			<span style="color: ${colors.green}">BM</span></p>
-    // 		`;
-    //   } else if (
-    //     frm.doc.query_status === "Pending From DH & COM" &&
-    //     frm.doc.dh_user_status === "Pending" &&
-    //     frm.doc.com_user_status === "Pending"
-    //   ) {
-    //     introMessage = `
-    //      <table>
-    //         <tr>
-    //             <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //             <td>&#8663;</td>
-    //             <td style="color: ${colors.red};"> DH</td>
-    //         </tr>
-    //         <tr>
-    //             <td>&#8664;</td>
-    //             <td style="color: ${colors.red};"> COM</td>
-    //         </tr>
-    //     </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From DH" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Pending"
-    //   ) {
-    //     introMessage = `
-    //      <table>
-    //         <tr>
-    //             <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //             <td>&#8663;</td>
-    //             <td style="color: ${colors.green};"> DH</td>
-    //         </tr>
-    //         <tr>
-    //             <td>&#8664;</td>
-    //             <td style="color: ${colors.red};"> COM</td>
-    //         </tr>
-    //     </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From COM" &&
-    //     frm.doc.dh_user_status === "Pending" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //      <table>
-    //         <tr>
-    //             <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //             <td>&#8663;</td>
-    //             <td style="color: ${colors.red};"> DH</td>
-    //         </tr>
-    //         <tr>
-    //             <td>&#8664;</td>
-    //             <td style="color: ${colors.green};"> COM</td>
-    //         </tr>
-    //     </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From DH & COM" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //      <table>
-    //         <tr>
-    //             <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //             <td>&#8663;</td>
-    //             <td style="color: ${colors.green};"> DH</td>
-    //         </tr>
-    //         <tr>
-    //             <td>&#8664;</td>
-    //             <td style="color: ${colors.green};"> COM</td>
-    //         </tr>
-    //     </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Pending From RM & ROM" &&
-    //     frm.doc.rm_user_status === "Pending" &&
-    //     frm.doc.rom_user_status === "Pending" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> RM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ROM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From ROM" &&
-    //     frm.doc.rm_user_status === "Pending" &&
-    //     frm.doc.rom_user_status === "Responded" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> RM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From RM" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Pending" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ROM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From RM & ROM" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Responded" &&
-    //     frm.doc.dh_user_status === "Responded" &&
-    //     frm.doc.com_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //          </tr>
-    //      </table>`;
-    //   }
-    //   // for zm & zom
-    //   else if (
-    //     frm.doc.query_status === "Pending From ZM & ZOM" &&
-    //     frm.doc.zm_user_status === "Pending" &&
-    //     frm.doc.zom_user_status === "Pending" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ZM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ZOM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From ZOM" &&
-    //     frm.doc.zm_user_status === "Pending" &&
-    //     frm.doc.zom_user_status === "Responded" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ZM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ZOM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From ZM" &&
-    //     frm.doc.zm_user_status === "Responded" &&
-    //     frm.doc.zom_user_status === "Pending" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ZM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.red};"> ZOM</td>
-    //          </tr>
-    //      </table>`;
-    //   } else if (
-    //     frm.doc.query_status === "Response From ZM & ZOM" &&
-    //     frm.doc.zm_user_status === "Responded" &&
-    //     frm.doc.zom_user_status === "Responded" &&
-    //     frm.doc.rm_user_status === "Responded" &&
-    //     frm.doc.rom_user_status === "Responded"
-    //   ) {
-    //     introMessage = `
-    //       <table>
-    //          <tr>
-    //              <td rowspan="2" style="color: ${colors.green}; padding-right: 2px;">Audit Manager &#8658; BM</td>
-    //              <td>&#8663;</td>
-    //              <td style="color: ${colors.green};"> DH</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> RM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ZM</td>
-    //          </tr>
-    //          <tr>
-    //              <td>&#8664;</td>
-    //              <td style="color: ${colors.green};"> COM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ROM</td>
-    //              <td>&#8658;</td>
-    //              <td style="color: ${colors.green};"> ZOM</td>
-    //          </tr>
-    //      </table>`;
-    //   }
-
-    //   // Add similar checks for other levels...
-    // }
-
-    // // Set the intro message
-    // frm.set_intro(introMessage, true);
-  },
-  // fetch_employee_id: function (frm) {
-  //   if (frm.doc.employee_id) {
-  //     frappe.call({
-  //       method:
-  //         "audit_management.audit_management.doctype.audit_level.audit_level.fetch_employee",
-  //       args: {
-  //         employee_id: frm.doc.employee_id,
-  //       },
-  //       callback: function (r) {
-  //         if (!r.exc) {
-  //           if (Array.isArray(r.message) && r.message.length > 0) {
-  //             const employeeData = r.message[0]; // Accessing the first element of the array
-  //             console.log("Employee Data:", employeeData);
-
-  //             // Safeguard against potential HTML injection
-  //             const escapeHtml = (unsafe) => {
-  //               return unsafe
-  //                 .replace(/&/g, "&amp;")
-  //                 .replace(/</g, "&lt;")
-  //                 .replace(/>/g, "&gt;")
-  //                 .replace(/"/g, "&quot;")
-  //                 .replace(/'/g, "&#039;");
-  //             };
-
-  //             // Directly set the response data in HTML with inline CSS
-  //             let html = `
-  // 								  <style>
-  // 									  .myemployee-grid {
-  // 										  display: grid;
-  // 										  grid-template-columns: repeat(3, 1fr); /* Creates 3 equal columns */
-  // 										  gap: 10px; /* Adds space between items */
-  // 									  }
-  // 									  .myemployee-grid p {
-  // 										  border-radius: 5px;
-  // 										  padding: 7px;
-  // 										  margin: 5px;
-  // 										  background: #f4f5f6;
-  // 									  }
-  // 									  .mylabel {
-  // 										  margin: 8px;
-  // 										  font-size: var(--text-sm);
-  // 									  }
-  // 								  </style>
-  // 								  <div class="employee-details">
-  // 									  <div class="myemployee-grid">
-  // 										  <div>
-  // 											  <span class="mylabel">Employee Name</span>
-  // 											  <p id="employee_name">${escapeHtml(employeeData.employee_name || "- - -")}</p>
-  // 											  <span class="mylabel">Employee ID</span>
-  // 											  <p id="employee_id">${escapeHtml(frm.doc.employee_id || "- - -")}</p>
-  // 											  <span class="mylabel">Designation</span>
-  // 											  <p id="employee_designation">${escapeHtml(
-  //                           employeeData.designation || "- - -"
-  //                         )}</p><hr>
-  // 										  </div>
-  // 										  <div>
-  // 											  <span class="mylabel">Phone</span>
-  // 											  <p id="employee_phone">${escapeHtml(employeeData.cell_number || "- - -")}</p>
-  // 											  <span class="mylabel">Region</span>
-  // 											  <p id="employee_region">${escapeHtml(employeeData.region || "- - -")}</p>
-  // 											  <span class="mylabel">Division</span>
-  // 											  <p id="employee_division">${escapeHtml(
-  //                           employeeData.division || "- - -"
-  //                         )}</p><hr>
-  // 										  </div>
-  // 										  <div>
-  // 											  <span class="mylabel">District</span>
-  // 											  <p id="employee_district">${escapeHtml(employeeData.district || "- - -")}</p>
-  // 											  <span class="mylabel">Branch</span>
-  // 											  <p id="employee_branch">${escapeHtml(employeeData.branch || "- - -")}</p>
-  // 											  <span class="mylabel">Department</span>
-  // 											  <p id="employee_department">${escapeHtml(
-  //                           employeeData.department || "- - -"
-  //                         )}</p><hr>
-  // 										  </div>
-  // 									  </div>
-  // 								  </div>
-  // 							  `;
-
-  //             // Set the above `html` as Summary HTML
-  //             frm.set_df_property("employee_html", "options", html);
-
-  //             // Setting user_id in the form field
-  //             // frm.set_value("stage_1_bm_user_id", employeeData.user_id || "- - -");
-  //           } else {
-  //             console.error("Unexpected response format or empty data.");
-  //           }
-  //         } else {
-  //           console.error("Error in API call:", r.exc);
-  //         }
-  //       },
-  //     });
-  //   }
-  // },
-  set_background_colors: function (frm) {
-    // frm.fields_dict["enter_branch_section"].wrapper.css({
-    //   "background-color": "#f29996",
-    // });
-    // frm.fields_dict["audit_query_section"].wrapper.css({
-    //   "background-color": "#eb9c9e", // Gradient
-    // });
-    // frm.fields_dict["bm_response_section"].wrapper.css({
-    //   "background-color": "#e49ea6",
-    // });
   },
   fetch_query_maker: function (frm) {
-    console.log("new");
-    // When form is new
-    // Setting Employee ID
-    let auditor_user = frm.doc.owner;
-    let auditor_user_emp_id = auditor_user.match(/\d+/)[0];
-    console.log("Employee ID:", auditor_user_emp_id);
+    console.log("Fetching query maker data...");
 
-    frm.call({
-      method: "fetch_employee_data",
-      args: {
-        employee_id: auditor_user_emp_id,
-      },
-      callback: function (r) {
-        if (!r.exc) {
-          // Accessing response data
-          const employeeData = r.message[0]; // Accessing the first element of the array
-          console.log("Employee Data:", employeeData);
+    // Prevent data fetching on refresh after save
+    if (!frm.__is_fetched) {
+        frm.__is_fetched = true; // Set flag to prevent re-fetching
 
-          // Set emp_full_name field with employee's name
-          frm.set_value("query_generated_by_name", employeeData.employee_name);
-          console.log(frm.doc.query_generated_by_name);
-          frm.refresh_field("query_generated_by_name");
+        let auditor_user = frappe.session.user;
+        let auditor_user_emp_id = auditor_user.match(/\d+/)[0];
+        console.log("Employee ID:", auditor_user_emp_id);
 
-          frm.set_value(
-            "query_generated_by_designation",
-            employeeData.designation
-          );
-          console.log(frm.doc.query_generated_by_designation);
-          frm.refresh_field("query_generated_by_designation");
+        frappe.call({
+            method: "audit_management.audit_management.doctype.my_audits.my_audits.fetch_employee_data",
+            args: {
+                employee_id: auditor_user_emp_id,
+            },
+            callback: function (r) {
+                if (!r.exc) {
+                    // Accessing response data
+                    const employeeData = r.message[0]; // Accessing the first element of the array
+                    console.log("Employee Data:", employeeData);
 
-          frm.set_value("query_generated_by_branch", employeeData.branch);
-          console.log(frm.doc.query_generated_by_branch);
-          frm.refresh_field("query_generated_by_branch");
-        } else {
-          console.error("Error fetching employee data", r.exc);
-        }
-      },
-      error: function (err) {
-        console.error("Failed to fetch employee data", err);
-      },
-    });
+                    // Set fields with employee data
+                    frm.set_value("query_generated_by_empid", auditor_user_emp_id);
+                    frm.refresh_field("query_generated_by_empid");
+
+                    frm.set_value("query_generated_by_name", employeeData.employee_name);
+                    frm.refresh_field("query_generated_by_name");
+
+                    frm.set_value("query_generated_by_designation", employeeData.designation);
+                    frm.refresh_field("query_generated_by_designation");
+
+                    frm.set_value("query_generated_by_branch", employeeData.branch);
+                    frm.refresh_field("query_generated_by_branch");
+
+                    frm.set_value("query_generated_by_mail", employeeData.company_email);
+                    frm.refresh_field("query_generated_by_mail");
+
+                } else {
+                    console.error("Error fetching employee data", r.exc);
+                }
+            },
+            error: function (err) {
+                console.error("Failed to fetch employee data", err);
+            },
+        });
+    }
   },
   show_sendToBmWithClose_btn: function (frm) {
     console.log("audit work kar raha hai");
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       frm
@@ -1001,7 +592,8 @@ frappe.ui.form.on("My Audits", {
   show_sendToDhComWithClose_btn: function (frm) {
     // Add the first button - "Send Response"
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       frm
@@ -1104,7 +696,8 @@ frappe.ui.form.on("My Audits", {
   show_sendToRmRomWithClose_btn: function (frm) {
     // Add the first button - "Send Response"
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       frm
@@ -1210,7 +803,8 @@ frappe.ui.form.on("My Audits", {
   show_sendToZmZomWithClose_btn: function (frm) {
     // Add the first button - "Send Response"
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       frm
@@ -1314,7 +908,8 @@ frappe.ui.form.on("My Audits", {
   },
   show_sendToGm_withClose_btn: function (frm) {
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       // Add the "Send to GM" button
@@ -1401,9 +996,100 @@ frappe.ui.form.on("My Audits", {
       }
     }
   },
+  show_sendToHr_withClose_btn: function (frm) {
+    if (
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
+      (frm.doc.status === "Draft" || frm.doc.status === "Pending")
+    ) {
+      // Add the "Send to HR" button
+      if (frm.doc.hr_user_status === "") {
+        frm
+          .add_custom_button(
+            __("Send to HR"),
+            function () {
+              // Fallback if emp_branch is not available
+              let emp_branch = frm.doc.emp_branch || "the employee's branch";
+
+              frappe.confirm(
+                `<i><b>Do you want to send the query to the Level 5 (HR of ${emp_branch}) i.e "${frm.doc.hr_name}"?</b></i>`,
+                () => {
+                  // Send the document to GM
+                  frappe
+                    .call({
+                      method: "frappe.share.add",
+                      freeze: true,
+                      freeze_message: "Internet Not Stable, Please Wait...",
+                      args: {
+                        doctype: frm.doctype,
+                        name: frm.docname,
+                        user: frm.doc.hr_user_id, // Send to GM user
+                        read: 1,
+                        write: 1,
+                        submit: 0,
+                        share: 1,
+                        notify: 1,
+                        send_email: 0,
+                      },
+                    })
+                    .then(() => {
+                      // Success message
+                      console.log("Sent to HR");
+                      frappe.show_alert({
+                        message:
+                          "Your Approval Request Sent to HR Successfully",
+                        indicator: "green",
+                      });
+                      frm.set_value("query_status", "Pending From HR");
+                      frm.set_value("hr_user_status", "Pending");
+                      frm.set_value("status", "Pending");
+                      frm.refresh_field("status");
+                      frm.refresh_field("query_status");
+                      frm.refresh_field("hr_user_status");
+
+                      // Call the common function to set pending time for GM
+                      frm.frappecalltopendingtimefunction(
+                        frm,
+                        frm.docname,
+                        "hr"
+                      );
+                      frm.save();
+                    })
+                    .catch(() => {
+                      // Handle failure
+                      frappe.msgprint(
+                        "An error occurred while sending the request to GM."
+                      );
+                    });
+                }
+              );
+            },
+            "Send to"
+          )
+          .css({
+            "background-color": "#28a745",
+            color: "#ffffff",
+            margin: "1px",
+          });
+        // Add styling to the button using its class
+        $('.btn.btn-default.ellipsis:contains("Send to")').css({
+          "background-color": "#28a745", // Custom green background color
+          color: "#ffffff", // White text color
+          margin: "1px",
+          width: "100px",
+        });
+      }
+
+      // Add the close_query button
+      if (frm.doc.status !== "Draft") {
+        frm.trigger("close_query");
+      }
+    }
+  },
   show_sendToCOO_withClose_btn: function (frm) {
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       // Add the "Send to COO" button
@@ -1493,7 +1179,8 @@ frappe.ui.form.on("My Audits", {
   },
   show_sendToCEO_withClose_btn: function (frm) {
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") ||
+        frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
       // Add the "Send to COO" button
@@ -1581,10 +1268,9 @@ frappe.ui.form.on("My Audits", {
   },
   show_sendToAll_withClose_btn: function (frm) {
     if (
-      frappe.user.has_role("Audit Manager") &&
+      (frappe.user.has_role("Audit Manager") || frappe.user.has_role("Audit Member")) &&
       (frm.doc.status === "Draft" || frm.doc.status === "Pending")
     ) {
-      // Create an array of user IDs and their corresponding status fields
       const userStatusMapping = [
         { userId: frm.doc.bm_user_id, statusField: "bm_user_status" },
         { userId: frm.doc.dh_user_id, statusField: "dh_user_status" },
@@ -1594,137 +1280,112 @@ frappe.ui.form.on("My Audits", {
         { userId: frm.doc.zm_user_id, statusField: "zm_user_status" },
         { userId: frm.doc.zom_user_id, statusField: "zom_user_status" },
         { userId: frm.doc.gm_user_id, statusField: "gm_user_status" },
+        { userId: frm.doc.hr_user_id, statusField: "hr_user_status" },
         { userId: frm.doc.coo_user_id, statusField: "coo_user_status" },
         { userId: frm.doc.ceo_user_id, statusField: "ceo_user_status" },
       ];
-
-      // Check if any of the statuses are empty
+  
       const hasEmptyStatus = userStatusMapping.some((mapping) => {
-        return !frm.doc[mapping.statusField]; // Check if _user_status is empty
+        return !frm.doc[mapping.statusField];
       });
-
-      // Add the "Send to All" button
+  
       if (hasEmptyStatus) {
         frm
           .add_custom_button(
             __("<b>Send to ALL</b>"),
-            function () {
-              // Fallback if emp_branch is not available
+            async function () {
               let emp_branch = frm.doc.emp_branch || "the employee's branch";
-
+  
               frappe.confirm(
                 `<i><b>Do you want to send the query to the remaining levels from branch ${emp_branch} (BM to CEO)?</b></i>`,
-                () => {
-                  let promises = [];
-
-                  // Loop through each user and send the document if the status is empty
-                  userStatusMapping.forEach((mapping) => {
+                async () => {
+                  // Loop through each user and update statuses where necessary
+                  for (const mapping of userStatusMapping) {
                     if (!frm.doc[mapping.statusField]) {
-                      promises.push(
-                        frappe
-                          .call({
-                            method: "frappe.share.add",
-                            args: {
-                              doctype: frm.doctype,
-                              name: frm.docname,
-                              user: mapping.userId, // Send to each user
-                              read: 1,
-                              write: 1,
-                              submit: 0,
-                              share: 1,
-                              notify: 1,
-                              send_email: 0,
-                            },
-                          })
-                          .then(() => {
-                            // Update the user status to Pending
-                            frm.set_value(mapping.statusField, "Pending");
-                          })
-                      );
+                      try {
+                        // Add sharing for each user
+                        await frappe.call({
+                          method: "frappe.share.add",
+                          args: {
+                            doctype: frm.doctype,
+                            name: frm.docname,
+                            user: mapping.userId,
+                            read: 1,
+                            write: 1,
+                            submit: 0,
+                            share: 1,
+                            notify: 1,
+                            send_email: 0,
+                          },
+                        });
+  
+                        // Update status field to "Pending"
+                        await frm.set_value(mapping.statusField, "Pending");
+                        await frm.save(); // Save after each update
+                      } catch (error) {
+                        console.error(`Failed to send to user: ${mapping.userId}`, error);
+                      }
                     }
+                  }
+  
+                  // Call server-side method for timestamps
+                  const response = await frappe.call({
+                    method: "audit_management.audit_management.doctype.my_audits.my_audits.send_to_all",
+                    args: { record: frm.docname },
                   });
-
-                  // Execute all promises
-                  Promise.all(promises)
-                    .then(() => {
-                      // Success message
-                      console.log("Sent to All");
-                      frappe.show_alert({
-                        message:
-                          "Your Query Request Sent to All stages Successfully",
-                        indicator: "green",
-                      });
-                      frm.set_value("status", "Pending");
-                      frm.refresh_field("status");
-                      frm.refresh_field("query_status");
-                      // Call the function to set pending times for all stages
-                      frappe.call({
-                        method:
-                          "audit_management.audit_management.doctype.my_audits.my_audits.send_to_all",
-                        args: {
-                          record: frm.docname, // Pass the current document's name as the 'record'
-                        },
-                        callback: function (response) {
-                          if (response.message) {
-                            const {
-                              bm_timestamp,
-                              dh_timestamp,
-                              com_timestamp,
-                              rm_timestamp,
-                              rom_timestamp,
-                              zm_timestamp,
-                              zom_timestamp,
-                              gm_timestamp,
-                              coo_timestamp,
-                              ceo_timestamp,
-                            } = response.message;
-
-                            // Check if the field is empty and set the value if it's not already set
-                            if (bm_timestamp && !frm.doc.bm_pending_time) {
-                              frm.set_value("bm_pending_time", bm_timestamp);
-                            }
-                            if (dh_timestamp && !frm.doc.dh_pending_time) {
-                              frm.set_value("dh_pending_time", dh_timestamp);
-                            }
-                            if (com_timestamp && !frm.doc.com_pending_time) {
-                              frm.set_value("com_pending_time", com_timestamp);
-                            }
-                            if (rm_timestamp && !frm.doc.rm_pending_time) {
-                              frm.set_value("rm_pending_time", rm_timestamp);
-                            }
-                            if (rom_timestamp && !frm.doc.rom_pending_time) {
-                              frm.set_value("rom_pending_time", rom_timestamp);
-                            }
-                            if (zm_timestamp && !frm.doc.zm_pending_time) {
-                              frm.set_value("zm_pending_time", zm_timestamp);
-                            }
-                            if (zom_timestamp && !frm.doc.zom_pending_time) {
-                              frm.set_value("zom_pending_time", zom_timestamp);
-                            }
-                            if (gm_timestamp && !frm.doc.gm_pending_time) {
-                              frm.set_value("gm_pending_time", gm_timestamp);
-                            }
-                            if (coo_timestamp && !frm.doc.coo_pending_time) {
-                              frm.set_value("coo_pending_time", coo_timestamp);
-                            }
-                            if (ceo_timestamp && !frm.doc.ceo_pending_time) {
-                              frm.set_value("ceo_pending_time", ceo_timestamp);
-                            }
-                            // Optionally, display a message
-                            console.log(
-                              `All Timestamps received for: ${frm.docname}`
-                            );
-                          }
-                        },
-                      });
-                      frm.save();
-                    })
-                    .catch(() => {
-                      // Handle failure
-                      frappe.msgprint(
-                        "An error occurred while sending the requests."
-                      );
-                    });
+  
+                  if (response.message) {
+                    const {
+                      bm_timestamp,
+                      dh_timestamp,
+                      com_timestamp,
+                      rm_timestamp,
+                      rom_timestamp,
+                      zm_timestamp,
+                      zom_timestamp,
+                      gm_timestamp,
+                      hr_timestamp,
+                      coo_timestamp,
+                      ceo_timestamp,
+                    } = response.message;
+  
+                    // Update pending timestamps
+                    const timestampUpdates = {
+                      bm_pending_time: bm_timestamp,
+                      dh_pending_time: dh_timestamp,
+                      com_pending_time: com_timestamp,
+                      rm_pending_time: rm_timestamp,
+                      rom_pending_time: rom_timestamp,
+                      zm_pending_time: zm_timestamp,
+                      zom_pending_time: zom_timestamp,
+                      gm_pending_time: gm_timestamp,
+                      hr_pending_time: hr_timestamp,
+                      coo_pending_time: coo_timestamp,
+                      ceo_pending_time: ceo_timestamp,
+                    };
+  
+                    for (const [field, value] of Object.entries(timestampUpdates)) {
+                      if (value && !frm.doc[field]) {
+                        await frm.set_value(field, value);
+                        await frm.save(); // Save after each update
+                      }
+                    }
+                  }
+  
+                  // Check if all status fields are set to "Pending"
+                  const allStatusPending = userStatusMapping.every(
+                    (mapping) => frm.doc[mapping.statusField] === "Pending"
+                  );
+  
+                  if (allStatusPending) {
+                    await frm.set_value("send_mail_to_all", "Yes");
+                    await frm.save(); // Save after setting send_mail_to_all
+                  }
+  
+                  frappe.show_alert({
+                    message: "Your Query Request Sent to All stages Successfully",
+                    indicator: "green",
+                  });
                 }
               );
             },
@@ -1735,22 +1396,21 @@ frappe.ui.form.on("My Audits", {
             color: "#ffffff",
             margin: "1px",
           });
-
-        // Add styling to the button using its class
+  
         $('.btn.btn-default.ellipsis:contains("Send to")').css({
-          "background-color": "#28a745", // Custom green background color
-          color: "#ffffff", // White text color
+          "background-color": "#28a745",
+          color: "#ffffff",
           margin: "1px",
           width: "100px",
         });
       }
-
-      // Add the close_query button
+  
       if (frm.doc.status !== "Draft") {
         frm.trigger("close_query");
       }
     }
   },
+  
   show_sendResponse_btn: function (frm) {
     frm
       .add_custom_button(__("Send Response"), function () {
@@ -1772,6 +1432,8 @@ frappe.ui.form.on("My Audits", {
             !frm.doc.zom_response_box) ||
           (frappe.session.user == frm.doc.gm_user_id &&
             !frm.doc.gm_response_box) ||
+          (frappe.session.user == frm.doc.hr_user_id &&
+            !frm.doc.hr_response_box) ||
           (frappe.session.user == frm.doc.coo_user_id &&
             !frm.doc.coo_response_box) ||
           (frappe.session.user == frm.doc.ceo_user_id &&
@@ -1925,6 +1587,12 @@ frappe.ui.form.on("My Audits", {
               frm.set_value("gm_user_status", "Responded");
             }
 
+            // for hr
+            if (frm.doc.hr_user_status === "Pending") {
+              frm.set_value("query_status", "Response From HR");
+              frm.set_value("hr_user_status", "Responded");
+            }
+
             // for coo
             if (frm.doc.coo_user_status === "Pending") {
               frm.set_value("query_status", "Response From COO");
@@ -2022,6 +1690,7 @@ frappe.ui.form.on("My Audits", {
               zm_timestamp,
               zom_timestamp,
               gm_timestamp,
+              hr_timestamp,
               coo_timestamp,
               ceo_timestamp,
               message,
@@ -2069,6 +1738,12 @@ frappe.ui.form.on("My Audits", {
               console.log("[DEBUG] gm_pending_time set:", gm_timestamp); // Debug message
             }
 
+            // Set the hr_pending_time field
+            if (hr_timestamp) {
+              frm.set_value("hr_pending_time", hr_timestamp);
+              console.log("[DEBUG] hr_pending_time set:", hr_timestamp); // Debug message
+            }
+
             // Set the coo_pending_time field
             if (coo_timestamp) {
               frm.set_value("coo_pending_time", coo_timestamp);
@@ -2084,574 +1759,5 @@ frappe.ui.form.on("My Audits", {
         },
       });
     };
-  },
-});
-// Custom script for "My Audits" doctype
-
-frappe.ui.form.on("My Audits", {
-  query_box: function (frm) {
-    // Enforce capitalization for query_box field
-    frm.doc.query_box = frm.doc.query_box.toUpperCase();
-    frm.refresh_field("query_box");
-  },
-  response_box: function (frm) {
-    // Enforce capitalization for query_box field
-    frm.doc.response_box = frm.doc.response_box.toUpperCase();
-    frm.refresh_field("response_box");
-  },
-  reporting_person_response_box: function (frm) {
-    // Enforce capitalization for query_box field
-    frm.doc.reporting_person_response_box =
-      frm.doc.reporting_person_response_box.toUpperCase();
-    frm.refresh_field("reporting_person_response_box");
-  },
-  higher_reporting_person_response_box: function (frm) {
-    // Enforce capitalization for query_box field
-    frm.doc.higher_reporting_person_response_box =
-      frm.doc.higher_reporting_person_response_box.toUpperCase();
-    frm.refresh_field("higher_reporting_person_response_box");
-  },
-  before_save: function (frm) {
-    // If the status is blank, set it to "Draft" before saving
-    if (!frm.doc.status) {
-      frm.set_value("status", "Draft");
-      frm.refresh_field("status");
-    }
-
-    // Check if branch and employee_details are not empty before saving
-    if (!frm.doc.branch || !frm.doc.employee_details) {
-      frappe.msgprint(
-        "<b>Before saving, First input Branch and select Employee.</b>"
-      );
-      frappe.validated = false;
-      return;
-    }
-
-    // Check if query_box is not empty before saving
-    if (!frm.doc.query_box) {
-      frappe.msgprint(
-        "<b>Before saving, First input your queries in the Query Box.</b>"
-      );
-      frappe.validated = false;
-      return;
-    }
-  },
-
-  branch: function (frm) {
-    // Get the selected branch value
-    var selected_branch = frm.doc.branch;
-    // Apply filter to employee_details field based on the selected branch
-    frm.set_query("employee_details", function () {
-      return {
-        filters: {
-          branch: selected_branch,
-        },
-      };
-    });
-    // Clear the employee_details field if branch is changed
-    frm.set_value("employee_details", null);
-  },
-
-  refresh: function (frm) {
-    if (frm.is_new()) {
-      console.log("new");
-      // When form is new
-      // Setting Employee ID
-      let auditor_user = frappe.session.user;
-      let auditor_user_emp_id = auditor_user.match(/\d+/)[0];
-      console.log("Employee ID:", auditor_user_emp_id);
-
-      frm.call({
-        method: "fetch_employee_data",
-        args: {
-          employee_id: auditor_user_emp_id,
-        },
-        callback: function (r) {
-          if (!r.exc) {
-            // Accessing response data
-            const employeeData = r.message[0]; // Accessing the first element of the array
-            console.log("Employee Data:", employeeData);
-
-            // Set emp_full_name field with employee's name
-            frm.set_value(
-              "query_generated_by_name",
-              employeeData.employee_name
-            );
-            console.log(frm.doc.query_generated_by_name);
-            frm.refresh_field("query_generated_by_name");
-
-            frm.set_value(
-              "query_generated_by_designation",
-              employeeData.designation
-            );
-            console.log(frm.doc.query_generated_by_designation);
-            frm.refresh_field("query_generated_by_designation");
-
-            frm.set_value("query_generated_by_branch", employeeData.branch);
-            console.log(frm.doc.query_generated_by_branch);
-            frm.refresh_field("query_generated_by_branch");
-          } else {
-            console.error("Error fetching employee data", r.exc);
-          }
-        },
-        error: function (err) {
-          console.error("Failed to fetch employee data", err);
-        },
-      });
-    }
-
-    if (frm.doc.status != "Draft") {
-      $(frm.fields_dict.enter_employee_details_section.wrapper)
-        .find(".section-head")
-        .html("Employee Details :");
-    }
-
-    // Check if user has the role "Audit Manager" and document status is "Draft"
-    if (frappe.user.has_role("Audit Manager") && frm.doc.status === "Draft") {
-      // Disable the form to prevent editing
-      frm.disable_form();
-
-      // Add custom button "Send to Employee"
-      frm
-        .add_custom_button("Send to Employee", function () {
-          // Log button click for debugging
-          console.log("Send to Employee button clicked!");
-
-          // Get the employee_id from the form
-          let employee_id = frm.doc.employee_details;
-          if (!employee_id) {
-            // Handle case where employee_details is not available
-            frappe.msgprint("Employee details not found.");
-            return;
-          }
-
-          // Fetch user_id from Employee doctype
-          frappe.db.get_value(
-            "Employee",
-            { employee: employee_id },
-            "user_id",
-            function (response) {
-              let user_id = response.user_id;
-              frm.doc.current_person_id = user_id;
-
-              // Now share the document with the user_id
-              frappe.confirm(
-                "<i>Do you want to send request to Employee ?</i>",
-                () => {
-                  // Action to perform if Yes is selected
-                  frappe.call({
-                    method: "frappe.share.add",
-                    freeze: true, // Freeze the UI during the request
-                    freeze_message: "Internet Not Stable, Please Wait...",
-                    args: {
-                      doctype: frm.doctype,
-                      name: frm.docname,
-                      user: frm.doc.current_person_id,
-                      read: 1,
-                      write: 1,
-                      submit: 0,
-                      share: 1,
-                      notify: 1,
-                      send_email: 0, // Prevent sending email notifications
-                    },
-                    callback: function (response) {
-                      // Display a success message to the user
-                      frappe.show_alert({
-                        message: "Your Approval Request Sent Successfully",
-                        indicator: "green",
-                      });
-                      // Update the document status if still in "Draft"
-                      if (frm.doc.status === "Draft") {
-                        frm.set_value("status", "Pending From Employee");
-                        frm.set_df_property("branch", "read_only", 1);
-                        frm.set_df_property("employee_details", "read_only", 1);
-                        frm.save(); // Ensure the form is saved
-                        frm.refresh_fields();
-                      }
-                    },
-                  });
-                },
-                () => {
-                  // Action to perform if No is selected (optional)
-                }
-              );
-            }
-          );
-        })
-        .css({
-          "background-color": "#28a745", // Set green color
-          color: "#ffffff", // Set font color to white
-        });
-    }
-    if (
-      frappe.user.has_role("Audit Manager") &&
-      frm.doc.status === "Pending From Employee"
-    ) {
-      frm.disable_form();
-    }
-
-    if (
-      frappe.user.has_role("Employee") &&
-      frm.doc.status === "Pending From Auditor"
-    ) {
-      frm.disable_form();
-    }
-
-    if (
-      frappe.user.has_role("Audit Manager") &&
-      frm.doc.status === "Pending From Auditor"
-    ) {
-      // frm.set_intro('Please review the response and choose an action:<br>' +
-      //     'If you\'re satisfied with employee Response, then Click <b>Satisfied</b>.<br>' +
-      //     'If you\'re not satisfied and want employee\'s reporting person response, then Click <b>Forward to Reporting</b>.');
-
-      // Add custom buttons "Satisfied" and "Not Satisfied"
-      if (frm.doc.higher_reporting_person_id) {
-        frm
-          .add_custom_button("Satisfied", function () {
-            // Your custom button logic here for "Satisfied"
-            // This function will be executed when the "Satisfied" button is clicked
-            if (frm.doc.status === "Pending From Auditor") {
-              frm.set_value("status", "Satisfied");
-              frm.refresh_field("status");
-              frm.save(); // Save the form to update the status
-              frm.disable_form();
-            }
-          })
-          .css({
-            "background-color": "#28a745", // Set green color
-            color: "#ffffff", // Set font color to white
-          });
-      } else {
-        frm
-          .add_custom_button("Satisfied", function () {
-            // Your custom button logic here for "Satisfied"
-            // This function will be executed when the "Satisfied" button is clicked
-            if (frm.doc.status === "Pending From Auditor") {
-              frm.set_value("status", "Satisfied");
-              frm.refresh_field("status");
-              frm.save(); // Save the form to update the status
-              frm.disable_form();
-            }
-          })
-          .css({
-            "background-color": "#28a745", // Set green color
-            color: "#ffffff", // Set font color to white
-          });
-        if (!frm.doc.reporting_person_id) {
-          frm
-            .add_custom_button("Forward to Reporting", function () {
-              let employee_id = frm.doc.employee_details;
-              if (!employee_id) {
-                // Handle case where employee_details is not available
-                frappe.msgprint("Employee details not found.");
-                return;
-              }
-
-              // Fetch user_id from Employee doctype
-              frappe.db.get_value(
-                "Employee",
-                { employee: employee_id },
-                "reporting_employee_user_id",
-                function (response) {
-                  let reporting_employee_user_id =
-                    response.reporting_employee_user_id;
-                  frm.doc.reporting_person_id = reporting_employee_user_id;
-
-                  // Now share the document with the user_id
-                  frappe.confirm(
-                    "<i>If you are not satisfied with Employee response then you can send this document to Employee's reporting person for your required information , <br><b>Do you want to send this document to Employee's reporting person ?</b></i>",
-                    () => {
-                      // Action to perform if Yes is selected
-                      frappe.call({
-                        method: "frappe.share.add",
-                        freeze: true, // Freeze the UI during the request
-                        freeze_message: "Internet Not Stable, Please Wait...",
-                        args: {
-                          doctype: frm.doctype,
-                          name: frm.docname,
-                          user: frm.doc.reporting_person_id,
-                          read: 1,
-                          write: 1,
-                          submit: 0,
-                          share: 1,
-                          notify: 1,
-                          send_email: 0, // Prevent sending email notifications
-                        },
-                        callback: function (response) {
-                          // Display a success message to the user
-                          frappe.show_alert({
-                            message: "Your Approval Request Sent Successfully",
-                            indicator: "green",
-                          });
-                          // Update the document status if still in "Draft"
-                          if (frm.doc.status === "Pending From Auditor") {
-                            frm.set_value("status", "Pending From Reporting");
-                            frm.refresh_field("status");
-                            frm.save();
-                          }
-                        },
-                      });
-                    },
-                    () => {
-                      // Action to perform if No is selected (optional)
-                    }
-                  );
-                }
-              );
-            })
-            .css({
-              "background-color": "#dc3545", // Set red color
-              color: "#ffffff", // Set font color to white
-            });
-        } else if (frm.doc.reporting_person_id) {
-          frm
-            .add_custom_button("Forward to Higher Reporting", function () {
-              let employee_id = frm.doc.employee_details;
-              if (!employee_id) {
-                // Handle case where employee_details is not available
-                frappe.msgprint("Employee details not found.");
-                return;
-              }
-
-              // Fetch user_id from Employee doctype
-              frappe.db.get_value(
-                "Employee",
-                { employee: employee_id },
-                "higher_reporting_employee_user_id",
-                function (response) {
-                  let higher_reporting_employee_user_id =
-                    response.higher_reporting_employee_user_id;
-                  frm.doc.higher_reporting_person_id =
-                    higher_reporting_employee_user_id;
-
-                  // Now share the document with the user_id
-                  frappe.confirm(
-                    "<i>If you are not satisfied with Employee & his Reporting person's response then you can send this document to Employee's Higher reporting person for your required information , <br><b>Do you want to send this document to Employee's Higher reporting person ?</b></i>",
-                    () => {
-                      // Action to perform if Yes is selected
-                      frappe.call({
-                        method: "frappe.share.add",
-                        freeze: true, // Freeze the UI during the request
-                        freeze_message: "Internet Not Stable, Please Wait...",
-                        args: {
-                          doctype: frm.doctype,
-                          name: frm.docname,
-                          user: frm.doc.higher_reporting_person_id,
-                          read: 1,
-                          write: 1,
-                          submit: 0,
-                          share: 1,
-                          notify: 1,
-                          send_email: 0, // Prevent sending email notifications
-                        },
-                        callback: function (response) {
-                          // Display a success message to the user
-                          frappe.show_alert({
-                            message: "Your Approval Request Sent Successfully",
-                            indicator: "green",
-                          });
-                          // Update the document status if still in "Draft"
-                          if (frm.doc.status === "Pending From Auditor") {
-                            frm.set_value(
-                              "status",
-                              "Pending From Higher Reporting"
-                            );
-                            frm.refresh_field("status");
-                            frm.save();
-                          }
-                        },
-                      });
-                    },
-                    () => {
-                      // Action to perform if No is selected (optional)
-                    }
-                  );
-                }
-              );
-            })
-            .css({
-              "background-color": "#dc3545", // Set red color
-              color: "#ffffff", // Set font color to white
-            });
-        }
-        if (frm.doc.higher_reporting_person_id) {
-          frm
-            .add_custom_button("Satisfied", function () {
-              // Your custom button logic here for "Satisfied"
-              // This function will be executed when the "Satisfied" button is clicked
-              if (frm.doc.status === "Pending From Auditor") {
-                frm.set_value("status", "Satisfied");
-                frm.refresh_field("status");
-                frm.save(); // Save the form to update the status
-              }
-            })
-            .css({
-              "background-color": "#28a745", // Set green color
-              color: "#ffffff", // Set font color to white
-            });
-        }
-      }
-    }
-    if (
-      frappe.user.has_role("Employee") &&
-      (frm.doc.status === "Pending From Auditor" ||
-        frm.doc.status === "Satisfied" ||
-        frm.doc.status === "Not Satisfied" ||
-        frm.doc.status === "Pending From Reporting" ||
-        frm.doc.status === "Pending From Higher Reporting")
-    ) {
-      frm.set_df_property("query_box", "read_only", 1);
-      frm.set_df_property("response_box", "read_only", 1);
-      frm.disable_save();
-    }
-    if (
-      frappe.session.user == frm.doc.reporting_person_id &&
-      frm.doc.status == "Pending From Reporting"
-    ) {
-      // frm.enable_save();
-      frm.set_df_property("branch", "read_only", 1);
-      frm.set_df_property("employee_details", "read_only", 1);
-      // Add custom button "Send Response"
-      frm
-        .add_custom_button("Send Response", function () {
-          // Check if response_box is empty
-          if (!frm.doc.reporting_person_response_box) {
-            frappe.msgprint(
-              "<b>Before submitting form, First input your response in the Response Box.</b>"
-            );
-            frappe.validated = false;
-            return;
-          }
-          // Display confirmation message
-          frappe.confirm(
-            "<i>Do you want to submit your Response ?</i>",
-            function () {
-              // Action to perform if Yes is selected
-              if (frm.doc.status === "Pending From Reporting") {
-                frm.set_value("status", "Pending From Auditor");
-                frm.set_df_property(
-                  "reporting_person_response_box",
-                  "read_only",
-                  1
-                );
-                frm.save(); // Save the form to update the status
-                frm.disable_form();
-              }
-              // Display a success message
-              frappe.show_alert({
-                message: "Response submitted successfully!",
-                indicator: "green",
-              });
-            },
-            function () {
-              // Action to perform if No is selected (optional)
-            }
-          );
-        })
-        .css({
-          "background-color": "#28a745", // Set green color
-          color: "#ffffff", // Set font color to white
-        });
-    }
-
-    if (
-      frappe.session.user == frm.doc.higher_reporting_person_id &&
-      frm.doc.status == "Pending From Higher Reporting"
-    ) {
-      // frm.enable_save();
-      frm.set_df_property("branch", "read_only", 1);
-      frm.set_df_property("employee_details", "read_only", 1);
-      frm.set_df_property("reporting_person_response_box", "read_only", 1);
-
-      // Add custom button "Send Response"
-      frm
-        .add_custom_button("Send Response", function () {
-          // Check if response_box is empty
-          if (!frm.doc.higher_reporting_person_response_box) {
-            frappe.msgprint(
-              "<b>Before submitting form, First input your response in the Response Box.</b>"
-            );
-            frappe.validated = false;
-            return;
-          }
-          // Display confirmation message
-          frappe.confirm(
-            "<i>Do you want to submit your Response ?</i>",
-            function () {
-              // Action to perform if Yes is selected
-              if (frm.doc.status === "Pending From Higher Reporting") {
-                frm.set_value("status", "Pending From Auditor");
-                frm.set_df_property(
-                  "higher_reporting_person_response_box",
-                  "read_only",
-                  1
-                );
-                frm.save(); // Save the form to update the status
-                frm.disable_form();
-              }
-              // Display a success message
-              frappe.show_alert({
-                message: "Response submitted successfully!",
-                indicator: "green",
-              });
-            },
-            function () {
-              // Action to perform if No is selected (optional)
-            }
-          );
-        })
-        .css({
-          "background-color": "#28a745", // Set green color
-          color: "#ffffff", // Set font color to white
-        });
-    }
-
-    if (
-      !frappe.user.has_role("Audit Manager") &&
-      frappe.user.has_role("Employee") &&
-      frm.doc.status === "Pending From Employee"
-    ) {
-      // Change the label of the query_section field dynamically
-      frm.set_df_property("query_box", "read_only", 1);
-      frm.disable_save();
-
-      // Add custom button "Send Response"
-      frm
-        .add_custom_button("Send Response", function () {
-          // Check if response_box is empty
-          if (!frm.doc.response_box) {
-            frappe.msgprint(
-              "<b>Before submitting form, First input your response in the Response Box.</b>"
-            );
-            frappe.validated = false;
-            return;
-          }
-          // Display confirmation message
-          frappe.confirm(
-            "<i>Do you want to submit your Response ?</i>",
-            function () {
-              // Action to perform if Yes is selected
-              if (frm.doc.status === "Pending From Employee") {
-                frm.set_value("status", "Pending From Auditor");
-                frm.set_df_property("response_box", "read_only", 1);
-                frm.save(); // Save the form to update the status
-              }
-              // Display a success message
-              frappe.show_alert({
-                message: "Response submitted successfully!",
-                indicator: "green",
-              });
-            },
-            function () {
-              // Action to perform if No is selected (optional)
-            }
-          );
-        })
-        .css({
-          "background-color": "#28a745", // Set green color
-          color: "#ffffff", // Set font color to white
-        });
-    }
   },
 });
